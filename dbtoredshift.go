@@ -1,4 +1,4 @@
-package main
+package dbtoredshift
 
 import (
 	"database/sql"
@@ -23,7 +23,7 @@ type Config struct {
 	SourceDB       *sql.DB
 	RedshiftDB     *sql.DB
 	RedshiftTable  string
-	RedshiftSchema string
+	Redshiftschema string
 	S3             S3
 	// Specify how COPY will map field data to columns in the target table,
 	// define source data attributes to enable the COPY command to correctly
@@ -81,7 +81,7 @@ func (c *Client) Exec(query string) error {
 		return err
 	}
 
-	err = load(c.cfg.RedshiftDB, c.cfg.RedshiftSchema, c.cfg.RedshiftTable, c.cfg.S3.Bucket, s3Key, c.cfg.S3.AccessKeyID, c.cfg.S3.SecretAccessKey, c.cfg.CopyParams, c.cfg.S3.Region)
+	err = load(c.cfg.RedshiftDB, c.cfg.Redshiftschema, c.cfg.RedshiftTable, c.cfg.S3.Bucket, s3Key, c.cfg.S3.AccessKeyID, c.cfg.S3.SecretAccessKey, c.cfg.CopyParams, c.cfg.S3.Region)
 
 	return nil
 }
@@ -131,6 +131,7 @@ func extract(db *sql.DB, query string) ([][]string, error) {
 // It returns any error that is encountered.
 func transform(records [][]string, session *session.Session, bucket string, prefix string, key string) error {
 	r, w := io.Pipe()
+	errc := make(chan error)
 
 	go func() {
 		csvWriter := csv.NewWriter(w)
@@ -138,16 +139,23 @@ func transform(records [][]string, session *session.Session, bucket string, pref
 		for _, row := range records {
 			err := csvWriter.Write(row)
 			if err != nil {
-				// TO-DO: use channel to return error
-				continue
+				// Add error to err channel and return
+				errc <- err
+				close(errc)
+				return
 			}
 		}
 		csvWriter.Flush()
 		w.Close()
 	}()
 
+	err := <-errc
+	if err != nil {
+		return err
+	}
+
 	uploader := s3manager.NewUploader(session)
-	_, err := uploader.Upload(&s3manager.UploadInput{
+	_, err = uploader.Upload(&s3manager.UploadInput{
 		Body:   r,
 		Bucket: aws.String(bucket),
 		Key:    aws.String(key),
