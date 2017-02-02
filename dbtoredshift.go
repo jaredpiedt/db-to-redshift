@@ -23,7 +23,7 @@ type Config struct {
 	SourceDB       *sql.DB
 	RedshiftDB     *sql.DB
 	RedshiftTable  string
-	Redshiftschema string
+	RedshiftSchema string
 	S3             S3
 	// Specify how COPY will map field data to columns in the target table,
 	// define source data attributes to enable the COPY command to correctly
