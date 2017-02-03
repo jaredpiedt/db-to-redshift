@@ -81,7 +81,7 @@ func (c *Client) Exec(query string) error {
 		return err
 	}
 
-	err = load(c.cfg.RedshiftDB, c.cfg.Redshiftschema, c.cfg.RedshiftTable, c.cfg.S3.Bucket, s3Key, c.cfg.S3.AccessKeyID, c.cfg.S3.SecretAccessKey, c.cfg.CopyParams, c.cfg.S3.Region)
+	err = load(c.cfg.RedshiftDB, c.cfg.RedshiftSchema, c.cfg.RedshiftTable, c.cfg.S3.Bucket, s3Key, c.cfg.S3.AccessKeyID, c.cfg.S3.SecretAccessKey, c.cfg.CopyParams, c.cfg.S3.Region)
 
 	return nil
 }
