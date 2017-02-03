@@ -5,9 +5,41 @@ A Go library for importing data from any `sql.DB` to Redshift.
 ```golang
 package main
 
-import "github.com/jaredpiedt/db-to-redshift"
+import (
+    "database/sql"
+    "fmt"
+    
+    _ "github.com/go-sql-driver/mysql"
+    "github.com/jaredpiedt/db-to-redshift"
+    _ "github.com/lib/pq"
+)
 
-func main() { 
+func main() {
+    // Open connection to source database
+    sourceDB, err := sql.Open("mysql", fmt.Sprintf(
+        "%s:%s@tcp(%s:3306)/%s",
+        "user",
+        "password",
+        "host.com",
+        "database",
+    ))
+    if err != nil {
+        panic(err)
+    }
+    
+    // Open connection to redshift database
+    rsDB, err := sql.Open("pq", fmt.Sprintf(
+        "user=%s password=%s dbname=%s sslmode=disable host=%s port=5439 sslmode=require",
+        "user",
+        "password",
+        "database",
+        "host.com",
+    ))
+    if err != nil {
+        panic(err)
+    }
+    
+    // Setup dbtoredshift config
     cfg := dbtoredshift.Config{
         SourceDB:       sourceDB,
         RedshiftDB:     rsDB,
@@ -25,6 +57,8 @@ func main() {
     }
     
     client := dbtoredshift.New(cfg)
+    
+    // Execute query. Data returned from that query will be inserted into Redshift
     err := client.Exec("SELECT syrup FROM banana.pancakes")
 }
 ```
