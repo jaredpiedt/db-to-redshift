@@ -7,24 +7,40 @@ import (
 	"io"
 
 	"github.com/aws/aws-sdk-go/aws"
-	"github.com/aws/aws-sdk-go/aws/credentials"
 	"github.com/aws/aws-sdk-go/aws/session"
 	"github.com/aws/aws-sdk-go/service/s3/s3manager"
 )
 
 // Client wraps all database and S3 information.
 type Client struct {
-	cfg        Config
-	awsSession *session.Session
+	cfg Config
 }
 
 // Config contains all the information needed to create a new Client.
 type Config struct {
-	SourceDB       *sql.DB
-	RedshiftDB     *sql.DB
-	RedshiftTable  string
-	RedshiftSchema string
-	S3             S3
+	Session  *session.Session
+	SourceDB *sql.DB
+	Redshift Redshift
+	S3       S3
+}
+
+// S3 contains all of the information needed to connect to an S3 bucket.
+type S3 struct {
+	Bucket string
+	Prefix string
+	Key    string
+}
+
+// Redshift contains all of the information needed to COPY from S3 into Redshift.
+type Redshift struct {
+	DB     *sql.DB
+	Schema string
+	Table  string
+
+	// A clause that indicates the method your cluster will use when accessing
+	// other AWS resources that contain data files or manifest files.
+	CredentialsParam string
+
 	// Specify how COPY will map field data to columns in the target table,
 	// define source data attributes to enable the COPY command to correctly
 	// read and parse the source data, and manage which operations the COPY
@@ -32,30 +48,10 @@ type Config struct {
 	CopyParams string
 }
 
-// S3 contains all of the information needed to connect to an S3 bucket
-type S3 struct {
-	Bucket          string
-	Region          string
-	AccessKeyID     string
-	SecretAccessKey string
-	Prefix          string
-	Key             string
-}
-
-// New will return a pointer to a new initialized db-to-redshift client.
+// New will return a pointer to a new db-to-redshift Client.
 func New(c Config) *Client {
-	awsSession := session.New(&aws.Config{
-		Region: aws.String(c.S3.Region),
-		Credentials: credentials.NewStaticCredentials(
-			c.S3.AccessKeyID,
-			c.S3.SecretAccessKey,
-			"",
-		),
-	})
-
 	return &Client{
-		cfg:        c,
-		awsSession: awsSession,
+		cfg: c,
 	}
 }
 
@@ -76,12 +72,12 @@ func (c *Client) Exec(query string) error {
 		return err
 	}
 
-	err = transform(res, c.awsSession, c.cfg.S3.Bucket, c.cfg.S3.Prefix, s3Key)
+	err = transform(res, c.cfg.Session, c.cfg.S3.Bucket, c.cfg.S3.Prefix, s3Key)
 	if err != nil {
 		return err
 	}
 
-	err = load(c.cfg.RedshiftDB, c.cfg.RedshiftSchema, c.cfg.RedshiftTable, c.cfg.S3.Bucket, s3Key, c.cfg.S3.AccessKeyID, c.cfg.S3.SecretAccessKey, c.cfg.CopyParams, c.cfg.S3.Region)
+	err = load(c.cfg.Redshift.DB, c.cfg.Redshift.Schema, c.cfg.Redshift.Table, c.cfg.S3.Bucket, s3Key, c.cfg.Redshift.CredentialsParam, c.cfg.Redshift.CopyParams, *c.cfg.Session.Config.Region)
 
 	return nil
 }
@@ -169,11 +165,11 @@ func transform(records [][]string, session *session.Session, bucket string, pref
 
 // load generates a Redshift COPY command and loads CSV data into Redshift.
 // It returns any error it encounters.
-func load(db *sql.DB, schema string, table string, bucket string, key string, accessKey string, secretKey string, copyParams string, region string) error {
+func load(db *sql.DB, schema string, table string, bucket string, key string, credentialsParam string, copyParams string, region string) error {
 	cmd := fmt.Sprintf(
 		`
 		COPY %s.%s
-		FROM 's3://%s/%s' CREDENTIALS 'aws_access_key_id=%s;aws_secret_access_key=%s'
+		FROM 's3://%s/%s' CREDENTIALS '%s'
 		%s
 		REGION '%s'
 		`,
@@ -181,8 +177,7 @@ func load(db *sql.DB, schema string, table string, bucket string, key string, ac
 		table,
 		bucket,
 		key,
-		accessKey,
-		secretKey,
+		credentialsParam,
 		copyParams,
 		region,
 	)
