@@ -65,6 +65,7 @@ func TestExec(t *testing.T) {
 			Bucket: "test_bucket",
 			Prefix: "test_prefix",
 			Key:    "test_key",
+			Region: "us-east-1",
 		},
 	}
 

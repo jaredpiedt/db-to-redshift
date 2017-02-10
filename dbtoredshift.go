@@ -39,7 +39,7 @@ type Redshift struct {
 	Table  string
 
 	// A clause that indicates the method your cluster will use when accessing
-	// other AWS resources that contain data files or manifest files.
+	// your AWS S3 resource.
 	CredentialsParam string
 
 	// Specify how COPY will map field data to columns in the target table,
