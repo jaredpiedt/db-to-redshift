@@ -26,6 +26,7 @@ type Config struct {
 
 // S3 contains all of the information needed to connect to an S3 bucket.
 type S3 struct {
+	Region string
 	Bucket string
 	Prefix string
 	Key    string
@@ -67,27 +68,27 @@ func (c *Client) Exec(query string) error {
 	}
 	s3Key += c.cfg.S3.Key
 
-	res, err := extract(c.cfg.SourceDB, query)
+	res, err := c.extract(query)
 	if err != nil {
 		return err
 	}
 
-	err = transform(res, c.cfg.Session, c.cfg.S3.Bucket, c.cfg.S3.Prefix, s3Key)
+	err = c.transform(res, s3Key)
 	if err != nil {
 		return err
 	}
 
-	err = load(c.cfg.Redshift.DB, c.cfg.Redshift.Schema, c.cfg.Redshift.Table, c.cfg.S3.Bucket, s3Key, c.cfg.Redshift.CredentialsParam, c.cfg.Redshift.CopyParams, *c.cfg.Session.Config.Region)
+	err = c.load(s3Key)
 
 	return nil
 }
 
 // extract retrieves data from the provided database with the provided query.
 // It returns a two dimensional slice of values and an error encountered.
-func extract(db *sql.DB, query string) ([][]string, error) {
+func (c *Client) extract(query string) ([][]string, error) {
 	var res [][]string
 
-	rows, err := db.Query(query)
+	rows, err := c.cfg.SourceDB.Query(query)
 	defer rows.Close()
 	if err != nil {
 		return nil, err
@@ -125,7 +126,7 @@ func extract(db *sql.DB, query string) ([][]string, error) {
 // and then writes the date to S3. It uses a go routine to simultaneously stream
 // the CSV data to S3 so nothing has to be stored on disk.
 // It returns any error that is encountered.
-func transform(records [][]string, session *session.Session, bucket string, prefix string, key string) error {
+func (c *Client) transform(records [][]string, key string) error {
 	r, w := io.Pipe()
 	errc := make(chan error)
 
@@ -141,6 +142,8 @@ func transform(records [][]string, session *session.Session, bucket string, pref
 				return
 			}
 		}
+
+		errc <- nil
 		csvWriter.Flush()
 		w.Close()
 	}()
@@ -150,10 +153,10 @@ func transform(records [][]string, session *session.Session, bucket string, pref
 		return err
 	}
 
-	uploader := s3manager.NewUploader(session)
+	uploader := s3manager.NewUploader(c.cfg.Session)
 	_, err = uploader.Upload(&s3manager.UploadInput{
 		Body:   r,
-		Bucket: aws.String(bucket),
+		Bucket: aws.String(c.cfg.S3.Bucket),
 		Key:    aws.String(key),
 	})
 	if err != nil {
@@ -165,7 +168,7 @@ func transform(records [][]string, session *session.Session, bucket string, pref
 
 // load generates a Redshift COPY command and loads CSV data into Redshift.
 // It returns any error it encounters.
-func load(db *sql.DB, schema string, table string, bucket string, key string, credentialsParam string, copyParams string, region string) error {
+func (c *Client) load(key string) error {
 	cmd := fmt.Sprintf(
 		`
 		COPY %s.%s
@@ -173,16 +176,16 @@ func load(db *sql.DB, schema string, table string, bucket string, key string, cr
 		%s
 		REGION '%s'
 		`,
-		schema,
-		table,
-		bucket,
+		c.cfg.Redshift.Schema,
+		c.cfg.Redshift.Table,
+		c.cfg.S3.Bucket,
 		key,
-		credentialsParam,
-		copyParams,
-		region,
+		c.cfg.Redshift.CredentialsParam,
+		c.cfg.Redshift.CopyParams,
+		c.cfg.S3.Region,
 	)
 
-	_, err := db.Exec(cmd)
+	_, err := c.cfg.Redshift.DB.Exec(cmd)
 
 	return err
 }
