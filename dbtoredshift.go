@@ -143,22 +143,25 @@ func (c *Client) transform(records [][]string, key string) error {
 			}
 		}
 
-		errc <- nil
 		csvWriter.Flush()
 		w.Close()
 	}()
 
-	err := <-errc
-	if err != nil {
-		return err
-	}
+	go func() {
+		uploader := s3manager.NewUploader(c.cfg.Session)
+		_, err := uploader.Upload(&s3manager.UploadInput{
+			Body:   r,
+			Bucket: aws.String(c.cfg.S3.Bucket),
+			Key:    aws.String(key),
+		})
+		if err != nil {
+			errc <- err
+		}
 
-	uploader := s3manager.NewUploader(c.cfg.Session)
-	_, err = uploader.Upload(&s3manager.UploadInput{
-		Body:   r,
-		Bucket: aws.String(c.cfg.S3.Bucket),
-		Key:    aws.String(key),
-	})
+		errc <- nil
+	}()
+
+	err := <-errc
 	if err != nil {
 		return err
 	}
@@ -173,7 +176,7 @@ func (c *Client) load(key string) error {
 		`
 		COPY %s.%s
 		FROM 's3://%s/%s' CREDENTIALS '%s'
-		%s
+		CSV DELIMITER '\t' %s
 		REGION '%s'
 		`,
 		c.cfg.Redshift.Schema,
