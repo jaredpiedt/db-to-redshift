@@ -9,12 +9,19 @@ import (
     "database/sql"
     "fmt"
     
+    "github.com/aws/aws-sdk-go/aws/session"
     _ "github.com/go-sql-driver/mysql"
     "github.com/jaredpiedt/db-to-redshift"
     _ "github.com/lib/pq"
 )
 
 func main() {
+    // Initialize AWS session
+    session, err := session.NewSession()
+    if err != nil {
+        panic(err)
+    }
+    
     // Open connection to source database
     sourceDB, err := sql.Open("mysql", fmt.Sprintf(
         "%s:%s@tcp(%s:3306)/%s",
@@ -41,24 +48,26 @@ func main() {
     
     // Setup dbtoredshift config
     cfg := dbtoredshift.Config{
-        SourceDB:       sourceDB,
-        RedshiftDB:     rsDB,
-        RedshiftTable:  "<table>",
-        RedshiftSchema: "<schema>",
-        S3: dbtoredshift.S3{
-            Bucket:           "<bucket>",
-            Region:           "<region>",
-            AccessKeyID:      "<access_key_id>",
-            SecretAccessKey:  "<secret_access_key>",
-            Prefix:           "<prefix>",
-            Key:              "<key>",
+        Session:  session,
+        SourceDB: sourceDB,
+        Redshift: dbtoredshift.Redshift{
+            DB:               rsDB,
+            Schema:           "<schema>",
+            Table:            "<table>",
+            CredentialsParam: "aws_iam_role=arn:aws:iam::<aws-account-id>:role/<role-name>",
+            CopyParams:       "TRUNCATECOLUMNS BLANKSASNULL EMPTYASNULL TIMEFORMAT 'auto' DATEFORMAT 'auto'"
         },
-        CopyParams: "",
+        S3: dbtoredshift.S3{
+            Bucket: "<bucket",
+            Prefix: "<prefix>",
+            Key:    "<key>",
+            Region: "<region>
+        }
     }
     
     client := dbtoredshift.New(cfg)
     
     // Execute query. Data returned from that query will be inserted into Redshift
-    err := client.Exec("SELECT syrup FROM banana.pancakes")
+    err := client.Exec("SELECT * FROM schema.table")
 }
 ```
