@@ -29,7 +29,6 @@ func TestExec(t *testing.T) {
 	fmt.Println("Starting test.")
 	// Setup mock AWS session
 	session := Session()
-	fmt.Println("Session initialized.")
 
 	// Setup mock mysql database
 	mysqlDB, mock, _ := sqlmock.New()
@@ -46,9 +45,9 @@ func TestExec(t *testing.T) {
 
 	mock.ExpectExec(`
         COPY test_schema.test_table
-        FROM 's3://test_bucket/test_prefix/test_key' CREDENTIALS ''
-        
-        REGION 'us-east-1'
+		FROM 's3://test_bucket/test_prefix/test_key' CREDENTIALS ''
+		CSV DELIMITER '\\t' TRUNCATECOLUMNS
+		REGION 'us-east-1'
     `).WillReturnResult(sqlmock.NewResult(2, 2))
 
 	cfg := Config{
@@ -59,7 +58,7 @@ func TestExec(t *testing.T) {
 			Schema:           "test_schema",
 			Table:            "test_table",
 			CredentialsParam: "",
-			CopyParams:       "",
+			CopyParams:       "TRUNCATECOLUMNS",
 		},
 		S3: S3{
 			Bucket: "test_bucket",
@@ -67,16 +66,14 @@ func TestExec(t *testing.T) {
 			Key:    "test_key",
 			Region: "us-east-1",
 		},
+		CSVDelimiter: '\t',
 	}
 
 	client := New(cfg)
 	assert.NotNil(t, client)
-	fmt.Println("Client created.")
 
 	err := client.Exec("SELECT * FROM test_schema.test_table")
 	assert.Nil(t, err)
-
-	fmt.Println("Query executed.")
 
 	if err = mock.ExpectationsWereMet(); err != nil {
 		t.Error(err)

@@ -5,6 +5,7 @@ import (
 	"encoding/csv"
 	"fmt"
 	"io"
+	"strconv"
 
 	"github.com/aws/aws-sdk-go/aws"
 	"github.com/aws/aws-sdk-go/aws/session"
@@ -18,10 +19,11 @@ type Client struct {
 
 // Config contains all the information needed to create a new Client.
 type Config struct {
-	Session  *session.Session
-	SourceDB *sql.DB
-	Redshift Redshift
-	S3       S3
+	Session      *session.Session
+	SourceDB     *sql.DB
+	Redshift     Redshift
+	S3           S3
+	CSVDelimiter rune // Default value is ','
 }
 
 // S3 contains all of the information needed to connect to an S3 bucket.
@@ -51,6 +53,11 @@ type Redshift struct {
 
 // New will return a pointer to a new db-to-redshift Client.
 func New(c Config) *Client {
+	// Default CSV delimiter to ','
+	if c.CSVDelimiter == 0 {
+		c.CSVDelimiter = ','
+	}
+
 	return &Client{
 		cfg: c,
 	}
@@ -176,7 +183,7 @@ func (c *Client) load(key string) error {
 		`
 		COPY %s.%s
 		FROM 's3://%s/%s' CREDENTIALS '%s'
-		CSV DELIMITER '\t' %s
+		CSV DELIMITER %s %s
 		REGION '%s'
 		`,
 		c.cfg.Redshift.Schema,
@@ -184,6 +191,7 @@ func (c *Client) load(key string) error {
 		c.cfg.S3.Bucket,
 		key,
 		c.cfg.Redshift.CredentialsParam,
+		strconv.QuoteRune(c.cfg.CSVDelimiter),
 		c.cfg.Redshift.CopyParams,
 		c.cfg.S3.Region,
 	)
