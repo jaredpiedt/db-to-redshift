@@ -1,5 +1,14 @@
 # db-to-redshift
-A Go library for importing data from any `sql.DB` to Redshift.
+A Go library for importing data from any `sql.DB` to Redshift. This library performs 3 steps:
+
+1. Retrieves data from the source database using the provided query.
+2. Writes the data to a CSV file and uploads it to the provided S3 bucket.
+3. Copies the S3 file into the provided Redshift database.
+
+## Install
+```bash
+go get github.com/jaredpiedt/db-to-redshift
+```
 
 ## Use
 ```golang
