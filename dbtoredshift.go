@@ -139,7 +139,7 @@ func (c *Client) transform(records [][]string, key string) error {
 
 	go func() {
 		csvWriter := csv.NewWriter(w)
-		csvWriter.Comma = '\t'
+		csvWriter.Comma = c.cfg.CSVDelimiter
 		for _, row := range records {
 			err := csvWriter.Write(row)
 			if err != nil {
