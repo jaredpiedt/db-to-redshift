@@ -61,7 +61,7 @@ func main() {
             Bucket: "<bucket",
             Prefix: "<prefix>",
             Key:    "<key>",
-            Region: "<region>
+            Region: "<region>"
         }
     }
     
