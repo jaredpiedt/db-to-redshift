@@ -80,3 +80,6 @@ func main() {
     err := client.Exec("SELECT * FROM schema.table")
 }
 ```
+
+## License
+db-to-redshift is available under the [Apache License, Version 2.0.](http://www.apache.org/licenses/LICENSE-2.0.html)
