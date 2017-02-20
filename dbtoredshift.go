@@ -86,6 +86,9 @@ func (c *Client) Exec(query string) error {
 	}
 
 	err = c.load(s3Key)
+	if err != nil {
+		return err
+	}
 
 	return nil
 }
